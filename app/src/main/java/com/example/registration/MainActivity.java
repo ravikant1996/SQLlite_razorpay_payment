@@ -4,8 +4,13 @@ package com.example.registration;
 import android.Manifest;
 import android.app.Activity;
 import android.app.DatePickerDialog;
+import android.content.ActivityNotFoundException;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputType;
 import android.util.Log;
@@ -22,6 +27,10 @@ import java.util.Calendar;
 import java.util.List;
 import java.util.Locale;
 
+import androidx.activity.result.ActivityResult;
+import androidx.activity.result.ActivityResultCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.app.ActivityCompat;
@@ -38,6 +47,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     List<DatabaseModel> dbList;
     private DatePickerDialog fromDatePickerDialog;
     private SimpleDateFormat dateFormatter;
+    final static int UPI_PAYMENT = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -94,8 +104,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     helpher.insertIntoDB(title, name, age, date, doctorName, description);
                 }
 
-                payNow(etDate.getText().toString(), etName.getText().toString(), etTitle.getText().toString(), "" + 100);
-
+                try {
+                    payNow(etDate.getText().toString(), etName.getText().toString(), etTitle.getText().toString(), "" + 100);
+                } catch (ActivityNotFoundException w) {
+                    Toast.makeText(MainActivity.this, "Razorpay error: ", Toast.LENGTH_LONG).show();
+                }
+                payUsingUpi("10", "9717038110@ybl", "ravi kant yadav", "test payment");
 
                 etTitle.setText("");
                 etName.setText("");
@@ -103,10 +117,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 etDate.setText("");
                 etDoctorName.setText("");
                 etDescrption.setText("");
-
-
-                Toast.makeText(MainActivity.this, "insert value", Toast.LENGTH_LONG).show();
-
             }
         });
 
@@ -200,5 +210,143 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     public void onPaymentError(int i, String s) {
         btnSubmit.setText(s);
         Toast.makeText(MainActivity.this, s, Toast.LENGTH_SHORT).show();
+    }
+
+    void payUsingUpi(String amount, String upiId, String name, String note) {
+
+        Uri uri = Uri.parse("upi://pay").buildUpon()
+                .appendQueryParameter("pa", upiId)
+                .appendQueryParameter("pn", name)
+                .appendQueryParameter("tid", "TRAN25455446")
+                .appendQueryParameter("mc", "")
+                .appendQueryParameter("tr", "")
+                .appendQueryParameter("tn", note)
+                .appendQueryParameter("am", amount)
+                .appendQueryParameter("cu", "INR")
+//                .appendQueryParameter("url", "https://pay2all.in")
+                .build();
+
+//        Uri uri = Uri.parse("upi://pay?pa=yourupiid&pn=Yadav%20Basant&tn=Testing%20by%20Yadav%20Basant&am=1&cu=INR&url=https://pay2all.in");
+
+        Intent upiPayIntent = new Intent(Intent.ACTION_VIEW);
+        upiPayIntent.setData(uri);
+        // will always show a dialog to user to choose an app
+        Intent chooser = Intent.createChooser(upiPayIntent, "Pay with");
+
+        // check if intent resolves
+        if (null != chooser.resolveActivity(getPackageManager())) {
+//            startActivityForResult(chooser, UPI_PAYMENT);
+            someActivityResultLauncher.launch(chooser);
+        } else {
+            Toast.makeText(MainActivity.this, "No UPI app found, please install one to continue", Toast.LENGTH_SHORT).show();
+        }
+
+    }
+
+//    @Override
+//    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+//        super.onActivityResult(requestCode, resultCode, data);
+//
+//        switch (requestCode) {
+//            case UPI_PAYMENT:
+//                if ((RESULT_OK == resultCode) || (resultCode == 11)) {
+//                    if (data != null) {
+//                        String trxt = data.getStringExtra("response");
+//                        Log.d("UPI", "onActivityResult: " + trxt);
+//                        ArrayList<String> dataList = new ArrayList<>();
+//                        dataList.add(trxt);
+//                        upiPaymentDataOperation(dataList);
+//                    } else {
+//                        Log.d("UPI", "onActivityResult: " + "Return data is null");
+//                        ArrayList<String> dataList = new ArrayList<>();
+//                        dataList.add("nothing");
+//                        upiPaymentDataOperation(dataList);
+//                    }
+//                } else {
+//                    Log.d("UPI", "onActivityResult: " + "Return data is null"); //when user simply back without payment
+//                    ArrayList<String> dataList = new ArrayList<>();
+//                    dataList.add("nothing");
+//                    upiPaymentDataOperation(dataList);
+//                }
+//                break;
+//        }
+//    }
+
+    ActivityResultLauncher<Intent> someActivityResultLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            new ActivityResultCallback<ActivityResult>() {
+                @Override
+                public void onActivityResult(ActivityResult result) {
+                    if (result.getResultCode() == Activity.RESULT_OK) {
+                        // There are no request codes
+                        Intent data = result.getData();
+                        if (data != null) {
+                            String text = data.getStringExtra("response");
+                            Log.d("UPI", "onActivityResult: " + text);
+                            ArrayList<String> dataList = new ArrayList<>();
+                            dataList.add(text);
+                            upiPaymentDataOperation(dataList);
+                        } else {
+                            Log.d("UPI", "onActivityResult: " + "Return data is null");
+                            ArrayList<String> dataList = new ArrayList<>();
+                            dataList.add("nothing");
+                            upiPaymentDataOperation(dataList);
+                        }
+                    } else {
+                        Log.d("UPI", "onActivityResult: " + "Return data is null"); //when user simply back without payment
+                        ArrayList<String> dataList = new ArrayList<>();
+                        dataList.add("nothing");
+                        upiPaymentDataOperation(dataList);
+                    }
+                }
+            });
+
+    private void upiPaymentDataOperation(ArrayList<String> data) {
+        if (isConnectionAvailable(MainActivity.this)) {
+            String str = data.get(0);
+            Log.d("UPIPAY", "upiPaymentDataOperation: " + str);
+            String paymentCancel = "";
+            if (str == null) str = "discard";
+            String status = "";
+            String approvalRefNo = "";
+            String response[] = str.split("&");
+            for (int i = 0; i < response.length; i++) {
+                String equalStr[] = response[i].split("=");
+                if (equalStr.length >= 2) {
+                    if (equalStr[0].toLowerCase().equals("Status".toLowerCase())) {
+                        status = equalStr[1].toLowerCase();
+                    } else if (equalStr[0].toLowerCase().equals("ApprovalRefNo".toLowerCase()) || equalStr[0].toLowerCase().equals("txnRef".toLowerCase())) {
+                        approvalRefNo = equalStr[1];
+                    }
+                } else {
+                    paymentCancel = "Payment cancelled by user.";
+                }
+            }
+
+            if (status.equals("success")) {
+                //Code to handle successful transaction here.
+                Toast.makeText(MainActivity.this, "Transaction successful.", Toast.LENGTH_SHORT).show();
+                Log.d("UPI", "responseStr: " + approvalRefNo);
+            } else if ("Payment cancelled by user.".equals(paymentCancel)) {
+                Toast.makeText(MainActivity.this, "Payment cancelled by user.", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(MainActivity.this, "Transaction failed.Please try again", Toast.LENGTH_SHORT).show();
+            }
+        } else {
+            Toast.makeText(MainActivity.this, "Internet connection is not available. Please check and try again", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    public static boolean isConnectionAvailable(Context context) {
+        ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (connectivityManager != null) {
+            NetworkInfo netInfo = connectivityManager.getActiveNetworkInfo();
+            if (netInfo != null && netInfo.isConnected()
+                    && netInfo.isConnectedOrConnecting()
+                    && netInfo.isAvailable()) {
+                return true;
+            }
+        }
+        return false;
     }
 }
