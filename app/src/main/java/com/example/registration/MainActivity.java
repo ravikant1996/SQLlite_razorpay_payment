@@ -109,7 +109,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 } catch (ActivityNotFoundException w) {
                     Toast.makeText(MainActivity.this, "Razorpay error: ", Toast.LENGTH_LONG).show();
                 }
-                payUsingUpi("10", "9717038110@ybl", "ravi kant yadav", "test payment");
+                payUsingUpi("10", "sdgajfc@ybl", "name", "test payment");
 
                 etTitle.setText("");
                 etName.setText("");
